@@ -1,0 +1,173 @@
+---
+title: "Stochastic SIR model using odin"
+author: "Thibaut Jombart, Rich FitzJohn"
+date: "`r Sys.Date()`"
+---
+
+``` {r setup, echo = FALSE, results = "hide"}
+lang_output <- function(x, lang) {
+  cat(c(sprintf("```%s", lang), x, "```"), sep = "\n")
+}
+c_output <- function(x) lang_output(x, "cc")
+r_output <- function(x) lang_output(x, "r")
+plain_output <- function(x) lang_output(x, "plain")
+knitr::opts_chunk$set(
+  fig.width = 7,
+  fig.height = 5,
+  collapse = TRUE)
+```
+
+# Basic model
+
+The stochastic equivalent of the previous model can be formulated
+in `odin` as follows:
+
+``` {r}
+model_file <- "odin_model.R"
+```
+
+``` {r echo = FALSE, results = "asis"}
+r_output(readLines(model_file))
+```
+
+
+We can use the same workflow as before to run the model, using 10
+initial infected individuals (`I_ini = 10`):
+``` {r }
+sir_generator <- odin::odin(model_file, verbose = FALSE)
+sir_generator
+x <- sir_generator(I_ini = 10)
+```
+
+``` {r fig.cap = "<i>An example of stochastic, discrete-time SIR model</i><br>"}
+set.seed(1)
+sir_col <- c("#8c8cd9", "#cc0044", "#999966")
+
+res <- x$run(0:100)
+par(mar = c(4.1, 5.1, 0.5, 0.5), las = 1)
+matplot(res[, 1], res[, -1], xlab = "Time", ylab = "Number of individuals",
+        type = "l", col = sir_col, lty = 1)
+legend("topright", lwd = 1, col = sir_col, legend = c("S", "I", "R"), bty = "n")
+```
+
+
+This gives us a single stochastic realisation of the model, which
+is of limited interest.
+
+
+
+# Generating replicates
+
+Stochastic models become interesting when multiple *replicates*
+(i.e. independent stochastic realisations of the model) can be generated.
+*odin* implements a straightforward interface for this, which we illustrate
+below. 
+
+First, let's have a look at the arguments of the `run` function of our new object:
+```{r}
+args(x$run)
+```
+
+`replicate` can take an `integer` indicating the number of independent
+realisations of the model we are after. Let's start with 200:
+```{r}
+res_200 <- x$run(0:100, replicate = 200)
+dim(res_200)
+```
+
+`res_200` is now a 3-dimensional array storing results for all time steps,
+compartments and replicates. The function `x$transform_variables` will be very
+handy to reformat these results into something we can plot and analyse:
+
+```{r}
+res_200 <- x$transform_variables(res_200)
+class(res_200)
+length(res_200)
+names(res_200)
+dim(res_200[[1]])
+```
+
+`res_200` is now a list where every compartment is stored separately; this can
+be easily coerced into a `data.frame` for further plotting:
+
+```{r}
+res_200 <- cbind.data.frame(t = res_200[[1]], res_200[-1])
+dim(res_200)
+res_200[1:10, 1:4]
+```
+
+Let us define colors for our plot:
+```{r }
+## function to make colors transparent, stolen from adegenet::transp
+transp <- function (col, alpha = 0.5) {
+    res <- apply(col2rgb(col), 2,
+                 function(c) rgb(c[1]/255, c[2]/255, 
+                                 c[3]/255, alpha))
+    return(res)
+}
+
+col <- rep(transp(sir_col, .1), each = 200)
+```
+
+
+```{r }
+par(mar = c(4.1, 5.1, 0.5, 0.5), las = 1)
+matplot(res_200[, 1], res_200[, -1], xlab = "Time", ylab = "Number of individuals",
+        type = "l", col = col, lty = 1)
+legend("topright", lwd = 1, col = sir_col, legend = c("S", "I", "R"), bty = "n")
+
+```
+
+
+## A handy wrapper for replicates
+
+The steps illustrated in the previous section can be wrapped into a simple
+function:
+
+```{r }
+## x: instance of odin model
+## t: time steps
+## n: number of replicates
+run_model <- function(x, t = 0:100, n = 1, ...) {
+    res <- x$run(t, replicate = n, ...)
+    res <- x$transform_variables(res)
+    res <- cbind.data.frame(t = res[[1]], res[-1])
+    attr(res, "n_compartments") <- length(x$names) - 1
+    attr(res, "n_replicates") <- n
+    attr(res, "compartments") <- x$names[-1]
+    class(res) <- c("pretty_odin", class(res))
+    res
+}
+
+sir_pal <- colorRampPalette(sir_col)
+
+plot.pretty_odin <- function(x, pal = sir_pal, ...) {
+    ## handle colors
+    n_compartments <- attr(x, "n_compartments")
+    n_replicates <- attr(x, "n_replicates")
+    col_leg <- pal(n_compartments)
+    alpha <- max(10 / n_replicates, 0.01)
+    col <- rep(transp(col_leg, alpha), each = n_replicates)
+
+    ## make plot
+    par(mar = c(4.1, 5.1, 0.5, 0.5), las = 1)
+    matplot(x[, 1], x[, -1], xlab = "Time", ylab = "Number of individuals",
+            type = "l", col = col, lty = 1, ...)
+    legend("topright", lwd = 1, col = col_leg, bty = "n",
+           legend = attr(x, "compartments"))
+}
+
+```
+
+Here are two examples with 20 time steps, 50 simulations:
+```{r }
+plot(run_model(x, t = 0:20, n = 50))
+```
+
+and another one using 100 timesteps and 500 replicates:
+```{r }
+plot(run_model(x, t = 0:100, n = 500))
+```
+
+
+

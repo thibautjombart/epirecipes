@@ -4,42 +4,38 @@ author: "Thibaut Jombart, Rich FitzJohn"
 date: "`r Sys.Date()`"
 ---
 
-``` {r setup, echo = FALSE, results = "hide"}
-lang_output <- function(x, lang) {
-  cat(c(sprintf("```%s", lang), x, "```"), sep = "\n")
-}
-c_output <- function(x) lang_output(x, "cc")
-r_output <- function(x) lang_output(x, "r")
-plain_output <- function(x) lang_output(x, "plain")
+```{r echo = FALSE, results = "hide"}
 knitr::opts_chunk$set(
   fig.width = 7,
   fig.height = 5,
   collapse = TRUE)
 ```
 
+
+
 # Basic model
 
 The stochastic equivalent of the previous model can be formulated
 in `odin` as follows:
 
-``` {r}
+```{r}
 model_file <- "odin_model.R"
 ```
 
-``` {r echo = FALSE, results = "asis"}
+```{r echo = FALSE, results = "asis"}
 r_output(readLines(model_file))
 ```
 
 
 We can use the same workflow as before to run the model, using 10
 initial infected individuals (`I_ini = 10`):
-``` {r }
+```{r }
 sir_generator <- odin::odin(model_file, verbose = FALSE)
 sir_generator
 x <- sir_generator(I_ini = 10)
 ```
 
-``` {r fig.cap = "<i>An example of stochastic, discrete-time SIR model</i><br>"}
+```{r fig.cap = "<i>An example of stochastic, discrete-time SIR model</i><br>"}
 set.seed(1)
 sir_col <- c("#8c8cd9", "#cc0044", "#999966")
 
